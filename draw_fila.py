@@ -22,6 +22,8 @@ class DrawFilament():
     CLOUD_LB = '/Users/penny/Works/MST_filaments/Peretto_Fuller_data/cloudfitsLB.txt'
     SCUTUM_FINAL = '/Users/penny/Works/MST_filaments/Extinction_filaments_data' \
                    '/Scutum_final.txt'
+    SCUTUM_FINAL_4TH_QUAD = '/Users/penny/Works/MST_filaments/Extinction_filaments_data' \
+                   '/Scutum_final_4th_quad.txt'
 
     def __init__(self, fila_n, min_l, max_l, x_box, y_box, line_b, threshold):
         self.lat = []
@@ -98,8 +100,13 @@ class DrawFilament():
         fig.tick_labels.set_font(size=20)
 
         # the galactic longitude range of the output figure
-        scutumdata = Table.read(self.SCUTUM_FINAL, format='ascii',
-                                delimiter='\t', guess=False)
+        start = time.time()
+        if self.fil_n in [1, 2, 3]:
+            scutumdata = Table.read(self.SCUTUM_FINAL, format='ascii',
+                                    delimiter='\t', guess=False)
+        else:
+            scutumdata = Table.read(self.SCUTUM_FINAL_4TH_QUAD, format='ascii',
+                                    delimiter='\t', guess=False)
         ws = (scutumdata['long_final'] > self.min_l) & (scutumdata['long_final'] < self.max_l)
         arml = scutumdata['long_final'][ws]
         num_rows = arml.size
