@@ -2,61 +2,77 @@ __author__ = 'penny'
 
 import networkx as nx
 import matplotlib.pyplot as plt
-import csv
+# import csv
 import numpy as np
 import matplotlib as mpl
 import aplpy
 from ds9norm import DS9Normalize
-import matplotlib.patches as mpatches
-import matplotlib.lines as mlines
+# import matplotlib.patches as mpatches
+# import matplotlib.lines as mlines
 import math
-import decimal
+# import decimal
 from astropy.table import Table
 from xlwt import *
+import time
 
 
 class DrawFilament():
-    # path to file containing galactic coordinates of Peretto & Fuller
-    cloudfitsLB = open('/Users/penny/Works/MST_filaments/Peretto_Fuller_data/cloudfitsLB.txt')
+    # path to file
+    CLOUD_LB = '/Users/penny/Works/MST_filaments/Peretto_Fuller_data/cloudfitsLB.txt'
+    FILAMENT_CANDIDATE = '/Users/penny/Works/MST_filaments/Extinction_filaments_data' \
+                         '/Candid1_cropped_final.fits'
+    SCUTUM_FINAL = '/Users/penny/Works/MST_filaments/Extinction_filaments_data' \
+                   '/Scutum_final.txt'
 
-    def __init__(self):
+    def __init__(self, min_l, max_l, x_box, y_box, line_b, threshold):
         self.lat = []
         self.lng = []
+        self.min_l = min_l
+        self.max_l = max_l
         self.graph = nx.Graph()
+        self.threshold = threshold
+
+        self.x_box = x_box
+        self.y_box = y_box
+
+        assert len(line_b) == 3
+        self.line_b = line_b
+
         # init the graph
+        start = time.time()
         self.create_graph()
+        end = time.time()
+        print('create_graph time is', end-start)
 
     def create_graph(self):
         # create arrays for storing coordinates of molecular clouds
-
-        for n, line in enumerate(self.cloudfitsLB):
+        cloudfitsLB = open(self.CLOUD_LB)
+        for n, line in enumerate(cloudfitsLB):
             columns = line.split(", ")
 
-            if ((float(columns[0]) >= 25.5) and (float(columns[0]) <= 28.5) and
+            if ((float(columns[0]) >= self.min_l) and (float(columns[0]) <= self.max_l) and
                         (float(columns[1])) <= 1 and (float(columns[1]) >= (-1))):
                 self.lat.append(float(columns[0]))
                 self.lng.append(float(columns[1]))
                 self.graph.add_node(str(n), posxy=(self.lat[-1], self.lng[-1]))
 
-        positions = nx.get_node_attributes(self.graph,'posxy')
+        positions = nx.get_node_attributes(self.graph, 'posxy')
 
         # build edges of graph, within a certain distance treshold
         for n, d in self.graph.nodes_iter(data=True):
             xn, yn = positions[n]
             for m, g in self.graph.nodes_iter(data=True):
                 xm, ym = positions[m]
-                dist = (math.sqrt(math.pow((xm - xn),2) + math.pow((ym - yn),2)))
-                if dist <= 0.05:   # dist is the threshold here
+                dist = (math.sqrt(math.pow((xm - xn),2) + math.pow((ym - yn), 2)))
+                if dist <= self.threshold:   # dist is the threshold here
                     self.graph.add_edge(n, m, weight=dist)
 
     def draw_figure(self):
         myfig = plt.figure(figsize=(20,20))
 
         # TODO: set the file directory as function parameter
-        fig = aplpy.FITSFigure("/Users/penny/Works/MST_filaments/"
-                               "Extinction_filaments_data/Candid1_cropped_final.fits",
-                               figure=myfig, zorder = 0)
-        norm = DS9Normalize(stretch='sqrt', clip_hi=99,clip_lo=1,
+        fig = aplpy.FITSFigure(self.FILAMENT_CANDIDATE, figure=myfig, zorder=0)
+        norm = DS9Normalize(stretch='sqrt', clip_hi=99, clip_lo=1,
                             contrast=1.56, bias=0.65)
         norm.update_clip(fig._data)
 
@@ -76,10 +92,9 @@ class DrawFilament():
         fig.tick_labels.set_font(size=20)
 
         # the galactic longitude range of the output figure
-        scutumdata = Table.read("/Users/penny/Works/MST_filaments/Extinction_filaments_data"
-                                "/Scutum_final.txt",
-                                format='ascii', delimiter='\t', guess=False)
-        ws = (scutumdata['long_final'] > 25.5) & (scutumdata['long_final'] < 28.5)
+        scutumdata = Table.read(self.SCUTUM_FINAL, format='ascii',
+                                delimiter='\t', guess=False)
+        ws = (scutumdata['long_final'] > self.min_l) & (scutumdata['long_final'] < self.max_l)
         arml = scutumdata['long_final'][ws]
         num_rows = arml.size
 
@@ -89,18 +104,16 @@ class DrawFilament():
         norm = mpl.colors.Normalize(clip=False,vmin=65,vmax=85)
         m = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
 
-        # TODO: set coor as para
         # Filament 1 coordinates
-        upperb = [0.06]*num_rows
-        armb = [-0.19]*num_rows
-        lowerb = [-0.44]*num_rows
-        armv = scutumdata['Vlsr'][ws]
+        upperb = [self.line_b[0]]*num_rows
+        armb = [self.line_b[1]]*num_rows
+        lowerb = [self.line_b[2]]*num_rows
+        # armv = scutumdata['Vlsr'][ws]
 
-        xbox = [26.8, 27.1, 27.1, 26.8, 26.8]
-        ybox = [-0.23, -0.23, -0.4, -0.4, -0.23]
-        box = [np.vstack((xbox, ybox))]
+        box = [np.vstack((self.x_box, self.y_box))]
 
-        fig.show_rectangles(arml, armb, 0.03, 0.002, color="magenta", cmap=cmap,
+        # TODO: Q~for draw three parallel lines, why it's called rectangles??
+        fig.show_rectangles(arml, armb, 0.1, 0.003, color="magenta", cmap=cmap,  #0.03, 0.002 for fila1
                             norm=norm, edgecolors="none", linewidth=2)
         fig.show_rectangles(arml, upperb, 0.3, 0.001, color="red", cmap=cmap,
                             norm=norm, edgecolors="none", linewidth=2)
@@ -108,10 +121,8 @@ class DrawFilament():
                             norm=norm, edgecolors="none", linewidth=2)
         fig.show_markers(self.lat, self.lng, s=30, alpha=1, zorder=2,
                          marker='^', c='yellow')
-        fig.show_lines(box, color="crimson", linewidth=3)
+        fig.show_lines(box, color="crimson", linewidth=3, zorder=10)
 
-        # TODO: the file name here should also be changed
-        # plt.show()
         return fig
 
     def get_tree_list(self):
@@ -124,7 +135,10 @@ class DrawFilament():
         # print edges of the MST and overlay them on top of GLIMPSE file
         pos_mst = nx.get_node_attributes(T,'posxy')
 
+        start = time.time()
         fig = self.draw_figure()
+        end = time.time()
+        print('draw_figure time is', end-start)  # 11.197342157363892
 
         for each in sorted(T.edges(data=True)):
             x1, y1 = pos_mst[each[0]]
@@ -133,8 +147,8 @@ class DrawFilament():
             mst_lat = [y1, y2]
             edge = [np.vstack((mst_long, mst_lat))]
             fig.show_lines(edge, color='aquamarine', linewidth=2.5)
-
-        plt.savefig("Filament1 Kruskal 0.1 MST.png")
+        fig_name = './fil1_output/Filament1_'+str(self.threshold)+'_MST.png'
+        plt.savefig(fig_name)
 
         # Tree Diagnosis
         # number of trees in the graph
@@ -153,7 +167,11 @@ class DrawFilament():
         i = 1
         workbook = Workbook()
         ws = workbook.add_sheet('Filament1')
+
+        start = time.time()
         tree_list = self.get_tree_list()
+        end = time.time()
+        print('get_tree_list+draw figure time is ', end-start)  # 24.365610122680664
 
         for each in tree_list:
             # number of nodes
@@ -163,7 +181,7 @@ class DrawFilament():
             tree_size = each.size()
 
             # tree total length
-            tree_length = each.size(weight = 'weight')
+            tree_length = each.size(weight='weight')
 
             # tree diameter
             # calculated in number of vertices which must be visited
@@ -217,5 +235,5 @@ class DrawFilament():
             for col, col_value in enumerate(tree):
                 ws.write(i, col, col_value)
             i += 1
-
-        workbook.save('tree1.xls')
+        wb_name = './fil1_output/tree1_'+str(self.threshold)+'.xls'
+        workbook.save(wb_name)
