@@ -14,17 +14,16 @@ import math
 from astropy.table import Table
 from xlwt import *
 import time
+import os
 
 
 class DrawFilament():
     # path to file
     CLOUD_LB = '/Users/penny/Works/MST_filaments/Peretto_Fuller_data/cloudfitsLB.txt'
-    FILAMENT_CANDIDATE = '/Users/penny/Works/MST_filaments/Extinction_filaments_data' \
-                         '/Candid1_cropped_final.fits'
     SCUTUM_FINAL = '/Users/penny/Works/MST_filaments/Extinction_filaments_data' \
                    '/Scutum_final.txt'
 
-    def __init__(self, min_l, max_l, x_box, y_box, line_b, threshold):
+    def __init__(self, fila_n, min_l, max_l, x_box, y_box, line_b, threshold):
         self.lat = []
         self.lng = []
         self.min_l = min_l
@@ -43,6 +42,13 @@ class DrawFilament():
         self.create_graph()
         end = time.time()
         print('create_graph time is', end-start)
+
+        self.fil_n = fila_n
+
+        self.fil_candidate_file = '/Users/penny/Works/MST_filaments/' \
+                                  'Extinction_filaments_data/Candid%d_cropped_final.fits' % self.fil_n
+        if not os.path.exists('./fil%d_output' % self.fil_n):
+            os.makedirs('./fil%d_output' % self.fil_n)
 
     def create_graph(self):
         # create arrays for storing coordinates of molecular clouds
@@ -68,10 +74,10 @@ class DrawFilament():
                     self.graph.add_edge(n, m, weight=dist)
 
     def draw_figure(self):
-        myfig = plt.figure(figsize=(20,20))
+        myfig = plt.figure(figsize=(20, 20))
 
         # TODO: set the file directory as function parameter
-        fig = aplpy.FITSFigure(self.FILAMENT_CANDIDATE, figure=myfig, zorder=0)
+        fig = aplpy.FITSFigure(self.fil_candidate_file, figure=myfig, zorder=0)
         norm = DS9Normalize(stretch='sqrt', clip_hi=99, clip_lo=1,
                             contrast=1.56, bias=0.65)
         norm.update_clip(fig._data)
@@ -87,7 +93,7 @@ class DrawFilament():
         fig.axis_labels.set_font(family='sans-serif',size='large')
         fig.axis_labels.set_xtext("Galactic Longitude [deg]")
         fig.axis_labels.set_ytext("Galactic Latitude [deg]")
-        plt.title("Filament1 Kruskal MST, threshold 0.1deg")
+        plt.title("Filament" + str(self.fil_n) + "Kruskal MST, threshold 0.1deg")
         fig.axis_labels.set_font(size=20)
         fig.tick_labels.set_font(size=20)
 
@@ -147,7 +153,7 @@ class DrawFilament():
             mst_lat = [y1, y2]
             edge = [np.vstack((mst_long, mst_lat))]
             fig.show_lines(edge, color='aquamarine', linewidth=2.5)
-        fig_name = './fil1_output/Filament1_'+str(self.threshold)+'_MST.png'
+        fig_name = './fil%d_output/Filament%d_%.2f_MST.png' % (self.fil_n, self.fil_n, self.threshold)
         plt.savefig(fig_name)
 
         # Tree Diagnosis
@@ -166,7 +172,7 @@ class DrawFilament():
     def save_tree(self):
         i = 1
         workbook = Workbook()
-        ws = workbook.add_sheet('Filament1')
+        ws = workbook.add_sheet('Filament'+str(self.fil_n))
 
         start = time.time()
         tree_list = self.get_tree_list()
@@ -218,6 +224,8 @@ class DrawFilament():
                 bone_likelihood = 0
             delta_x = x_max - x_min
             delta_y = y_max - y_min
+            if delta_y < 1e-6:  # if delta_y ==0
+                continue
             length_ratio = delta_x / delta_y
 
             # average inclination angle
@@ -227,7 +235,7 @@ class DrawFilament():
                 x2, y2 = pos_tree[line[1]]
                 line_long = x2 - x1
                 line_lat = y2 - y1
-                angle.append(math.degrees(math.atan(line_lat/ line_long)))
+                angle.append(math.degrees(math.atan(line_lat/line_long)))
             avg_angle = np.mean(angle)
 
             tree = [nnodes, tree_size, tree_length, diam, avg_deg, avg_cc,
@@ -235,5 +243,5 @@ class DrawFilament():
             for col, col_value in enumerate(tree):
                 ws.write(i, col, col_value)
             i += 1
-        wb_name = './fil1_output/tree1_'+str(self.threshold)+'.xls'
+        wb_name = './fil%d_output/tree1_%.2f.xls' % (self.fil_n, self.threshold)
         workbook.save(wb_name)
