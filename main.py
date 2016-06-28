@@ -3,7 +3,7 @@ __author__ = 'penny'
 from draw_fila import DrawFilament
 import numpy as np
 import time
-
+# TODO: figure the time bottleneck, be either draw_bg_figure or analysis tree
 # filament pool filament_number: [min_l, max_l, x_box, y_box, line_b]
 fil_pool = {1: [25.5, 28.5, [26.8, 27.1, 27.1, 26.8, 26.8], [-0.23, -0.23, -0.4, -0.4, -0.23], [0.06, -0.19, -0.44]],
             2: [22.5, 25.5, [24.9, 25.5, 25.5, 24.9, 24.9], [-0.18, -0.18, -0.6, -0.6, -0.18], [0.06, -0.21, -0.48]],
@@ -16,11 +16,11 @@ fil_pool = {1: [25.5, 28.5, [26.8, 27.1, 27.1, 26.8, 26.8], [-0.23, -0.23, -0.4,
 
 error_log = open('.error_log.txt', 'w')
 # for fil_i in range(9, 11):
-for fil_i in range(1, 2):  # test with filament1
+for fil_i in range(1, 10):  # test with filament1
     if fil_i not in fil_pool.keys():
         continue
     # for i in np.linspace(0.01, 0.2, 20):  # threshold
-    for i in np.linspace(0.04, 0.08, 5):  # threshold
+    for i in np.linspace(0.04, 0.09, 6):  # threshold
         try:
             start = time.time()
             fila = DrawFilament(fila_n=fil_i,
@@ -29,7 +29,7 @@ for fil_i in range(1, 2):  # test with filament1
                                 line_b=fil_pool[fil_i][4], threshold=i)
             fila.save_tree()
             end = time.time()
-            print(i, ' time is', end-start)
+            print(i, 'total time is', end-start)
         except ZeroDivisionError:
             error_log.write('filament%d with threshold %.2f got an error!' % (fil_i, i))
             continue
