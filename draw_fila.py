@@ -15,6 +15,7 @@ from astropy.table import Table
 from xlwt import *
 import time
 import os
+from math import *
 
 
 class DrawFilament():
@@ -75,7 +76,7 @@ class DrawFilament():
                 if dist <= self.threshold:   # dist is the threshold here
                     self.graph.add_edge(n, m, weight=dist)
 
-    def draw_figure(self):
+    def get_bg_figure(self):
         myfig = plt.figure(figsize=(20, 20))
 
         # TODO: set the file directory as function parameter
@@ -138,6 +139,8 @@ class DrawFilament():
 
         return fig
 
+    # def draw_tree_dandidates(self, each_tree):
+
     def get_tree_list(self):
         # using Kruskal's algorithm
         T = nx.minimum_spanning_tree(self.graph)
@@ -145,28 +148,14 @@ class DrawFilament():
         # using Prim's algorithm
         # T = nx.prim_mst(self.graph)
 
-        # print edges of the MST and overlay them on top of GLIMPSE file
-        pos_mst = nx.get_node_attributes(T,'posxy')
-
-        start = time.time()
-        fig = self.draw_figure()
-        end = time.time()
-        print('draw_figure time is', end-start)  # 11.197342157363892
-
-        for each in sorted(T.edges(data=True)):
-            x1, y1 = pos_mst[each[0]]
-            x2, y2 = pos_mst[each[1]]
-            mst_long = [x1, x2]
-            mst_lat = [y1, y2]
-            edge = [np.vstack((mst_long, mst_lat))]
-            fig.show_lines(edge, color='aquamarine', alpha=0.7, linewidth=4)
-        fig_name = './fil%d_output/Filament%d_%.2f_MST.png' % (self.fil_n, self.fil_n, self.threshold)
-        plt.savefig(fig_name)
+        # start = time.time()
+        # fig = self.draw_figure()
+        # end = time.time()
+        # print('draw_figure time is', end-start)  # 11.197342157363892
 
         # Tree Diagnosis
         # number of trees in the graph
-        ntrees = nx.number_connected_components(T)
-        print "number of trees = " + str(ntrees)
+        # ntrees = nx.number_connected_components(T)
 
         #generate lists of individual trees
         tree_list = nx.connected_component_subgraphs(T)
@@ -176,48 +165,42 @@ class DrawFilament():
         # print "largest tree in the region: " + str(max_tree)
         return tree_list
 
+    def get_distance(self, delta1, delta2):
+        return sqrt(delta1**2 + delta2**2)
+
     def save_tree(self):
         i = 1
         workbook = Workbook()
         ws = workbook.add_sheet('Filament'+str(self.fil_n))
+
+        # add title for sheet
+        title = ['size', 'center_point_xpos', 'center_point_ypos', 'length_ratio', 'likelihood']
+        for col, value in enumerate(title):
+            ws.write(0, col, value)
 
         start = time.time()
         tree_list = self.get_tree_list()
         end = time.time()
         print('get_tree_list+draw figure time is ', end-start)  # 24.365610122680664
 
-        for each in tree_list:
-            # number of nodes
-            nnodes = each.number_of_nodes()
+        # print edges of the MST and overlay them on top of GLIMPSE file
+        # pos_mst = nx.get_node_attributes(tree_list, 'posxy')
+        # draw MST upon the bone figure
+        fig = self.get_bg_figure()
 
-            # size similar to above
-            tree_size = each.size()
+        # analysis each tree
+        for each_tree in tree_list:
+            # skip one node
+            if each_tree.size() == 0:  # number of edges
+                continue
 
-            # tree total length
-            tree_length = each.size(weight='weight')
-
-            # tree diameter
-            # calculated in number of vertices which must be visited
-            # in order to travel from one node to another
-            diam = nx.diameter(each)
-
-            # average degree
-            avg_deg = float(nnodes) / tree_size
-
-            # clustering coefficient
-            cc = nx.clustering(each)
-            avg_cc = sum(cc.values()) / len(cc)
-
-            # tree density
-            # for undirected graphs, tree density = 2m/ (n*(n-1)), m = # of edges, n = # of nodes
-            rho = nx.density(each)
-
-            # node centralities
-            # measuring length/ width ratio of tree
-            pos_tree = nx.get_node_attributes(each, 'posxy')
+            # if it's parallel
+            # node centralities: measuring length/ width ratio of tree
+            pos_tree = nx.get_node_attributes(each_tree, 'posxy')
             x_val = []
             y_val = []
-            for n,d in each.nodes_iter(data=True):
+            # TODO: check networkx to find a better get access to all nodes
+            for n, d in each_tree.nodes_iter(data=True):
                 xn, yn = pos_tree[n]
                 x_val.append(xn)
                 y_val.append(yn)
@@ -225,31 +208,97 @@ class DrawFilament():
             x_min = min(x_val)
             y_max = max(y_val)
             y_min = min(y_val)
-            if (x_min <= 26.94 <= x_max) and (y_min <= -0.3 <= y_max):
-                bone_likelihood = 1
-            else:
-                bone_likelihood = 0
+
             delta_x = x_max - x_min
             delta_y = y_max - y_min
-            if delta_y < 1e-6:  # if delta_y ==0
+
+
+            #  draw here
+            for each in sorted(each_tree.edges(data=True)):
+                x1, y1 = pos_tree[each[0]]
+                x2, y2 = pos_tree[each[1]]
+                mst_long = [x1, x2]
+                mst_lat = [y1, y2]
+                edge = [np.vstack((mst_long, mst_lat))]
+                fig.show_lines(edge, color='aquamarine', alpha=0.6, linewidth=4)
+
+            # skip tiny pieces
+            # TODO: the 0.1 threshold here should be replaced with others later
+            if self.get_distance(delta_x, delta_y) < 0.1:
                 continue
-            length_ratio = delta_x / delta_y
-            # the length_ration depends on width/length
+
+            length_ratio = atan2(delta_y, delta_x)  #return between -pi and pi
+
+            # if length_ratioo ~ 0 -> parallel   -> PI/9 as a threshold first
+            #                  ~ PI/2 -> vertical
+            if fabs(length_ratio) < pi/9 or fabs(length_ratio) > (8./9.)*pi:
+                # save to file  and draw
+                likelihood = 1
+
+                # box example [26.8, 27.1, 27.1, 26.8, 26.8], [-0.23, -0.23, -0.4, -0.4, -0.23]
+                # draw box
+                fil_x_box = [x_min, x_max, x_max, x_min, x_min]
+                fil_y_box = [y_max, y_max, y_min, y_min, y_max]
+                box = [np.vstack((fil_x_box, fil_y_box))]
+                fig.show_lines(box, color="yellow", linewidth=2, alpha=0.6, zorder=10)
+
+            # elif (11./18.)*pi > fabs(length_ratio) > (9./18.)*pi: # vertical
+            #     likelihood = 0.5
+
+            else:
+                likelihood = 0.
+
+            # skinny 
+
+            print(nx.info(each_tree))
+            # (size, center_point_xpos, center_point_ypos, length_ratio, likelihood)
+            tree = [each_tree.size(), delta_x/2., delta_y/2., length_ratio, likelihood]
+            for col, col_value in enumerate(tree):
+                ws.write(i, col, col_value)
+            i += 1
+
+
+
+            # number of nodes
+            # nnodes = each.number_of_nodes()
+
+            # size similar to above
+            # tree_size = each.size()
+
+            # tree total length
+            # tree_length = each.size(weight='weight')
+
+            # tree diameter :calculated in number of vertices which must be visited
+            # in order to travel from one node to another
+            # diam = nx.diameter(each)
+
+
+
+            # average degree
+            # avg_deg = float(nnodes) / tree_size
+
+            # http://networkx.readthedocs.io/en/stable/reference/algorithms.clustering.html?highlight=clustering ??
+            # what is clustering coefficient: a measure of the degree to which nodes tend to cluster
+            # cc = nx.clustering(each)
+            # avg_cc = sum(cc.values()) / len(cc)
+
+            # tree density??
+            # for undirected graphs, tree density = 2m/ (n*(n-1)), m = # of edges, n = # of nodes
+            # rho = nx.density(each)
+
+
 
             # average inclination angle
-            angle = []
+            '''angle = []
             for line in sorted(each.edges(data=True)):  # sorted start from 1st dim
                 x1, y1 = pos_tree[line[0]]
                 x2, y2 = pos_tree[line[1]]
                 line_long = x2 - x1
                 line_lat = y2 - y1
                 angle.append(math.degrees(math.atan(line_lat/line_long)))
-            avg_angle = np.mean(angle)
+            avg_angle = np.mean(angle)'''
+        fig_name = './fil%d_output/Filament%d_%.2f_MST.png' % (self.fil_n, self.fil_n, self.threshold)
+        plt.savefig(fig_name)
 
-            tree = [nnodes, tree_size, tree_length, diam, avg_deg, avg_cc,
-                    rho, delta_x, delta_y, length_ratio, avg_angle, bone_likelihood]
-            for col, col_value in enumerate(tree):
-                ws.write(i, col, col_value)
-            i += 1
         wb_name = './fil%d_output/tree1_%.2f.xls' % (self.fil_n, self.threshold)
         workbook.save(wb_name)
