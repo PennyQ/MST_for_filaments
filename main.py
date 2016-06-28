@@ -15,10 +15,12 @@ fil_pool = {1: [25.5, 28.5, [26.8, 27.1, 27.1, 26.8, 26.8], [-0.23, -0.23, -0.4,
             10: [331.5, 334.5, [331.5, 333, 333, 331.5, 331.5], [0.1, 0.1, -0.25, -0.25, 0.1], [0.03, -0.32, -0.67]]}
 
 error_log = open('.error_log.txt', 'w')
-for fil_i in range(9, 11):
+# for fil_i in range(9, 11):
+for fil_i in range(1, 2):  # test with filament1
     if fil_i not in fil_pool.keys():
         continue
-    for i in np.linspace(0.01, 0.2, 20):  # threshold
+    # for i in np.linspace(0.01, 0.2, 20):  # threshold
+    for i in np.linspace(0.04, 0.08, 5):  # threshold
         try:
             start = time.time()
             fila = DrawFilament(fila_n=fil_i,

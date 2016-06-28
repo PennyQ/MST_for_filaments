@@ -95,7 +95,7 @@ class DrawFilament():
         fig.axis_labels.set_font(family='sans-serif',size='large')
         fig.axis_labels.set_xtext("Galactic Longitude [deg]")
         fig.axis_labels.set_ytext("Galactic Latitude [deg]")
-        plt.title("Filament" + str(self.fil_n) + "Kruskal MST, threshold 0.1deg")
+        plt.title("Filament%d Kruskal MST, threshold %.2fdeg" % (self.fil_n, self.threshold))
         fig.axis_labels.set_font(size=20)
         fig.tick_labels.set_font(size=20)
 
@@ -159,7 +159,7 @@ class DrawFilament():
             mst_long = [x1, x2]
             mst_lat = [y1, y2]
             edge = [np.vstack((mst_long, mst_lat))]
-            fig.show_lines(edge, color='aquamarine', linewidth=2.5)
+            fig.show_lines(edge, color='aquamarine', alpha=0.7, linewidth=4)
         fig_name = './fil%d_output/Filament%d_%.2f_MST.png' % (self.fil_n, self.fil_n, self.threshold)
         plt.savefig(fig_name)
 
@@ -190,7 +190,7 @@ class DrawFilament():
             # number of nodes
             nnodes = each.number_of_nodes()
 
-            # size
+            # size similar to above
             tree_size = each.size()
 
             # tree total length
@@ -234,10 +234,11 @@ class DrawFilament():
             if delta_y < 1e-6:  # if delta_y ==0
                 continue
             length_ratio = delta_x / delta_y
+            # the length_ration depends on width/length
 
             # average inclination angle
             angle = []
-            for line in sorted(each.edges(data=True)):
+            for line in sorted(each.edges(data=True)):  # sorted start from 1st dim
                 x1, y1 = pos_tree[line[0]]
                 x2, y2 = pos_tree[line[1]]
                 line_long = x2 - x1
