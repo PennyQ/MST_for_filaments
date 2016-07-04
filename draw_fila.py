@@ -15,6 +15,9 @@ from astropy.table import Table
 from xlwt import *
 import time
 import os
+from math import *
+
+# TODO: divide draw figures from MST generation/analysis
 
 
 class DrawFilament():
@@ -43,7 +46,7 @@ class DrawFilament():
         start = time.time()
         self.create_graph()
         end = time.time()
-        print('create_graph time is', end-start)
+        print('create_graph time is', end-start) # this is ok
 
         self.fil_n = fila_n
 
@@ -71,11 +74,11 @@ class DrawFilament():
             xn, yn = positions[n]
             for m, g in self.graph.nodes_iter(data=True):
                 xm, ym = positions[m]
-                dist = (math.sqrt(math.pow((xm - xn),2) + math.pow((ym - yn), 2)))
+                dist = (math.sqrt(math.pow((xm - xn), 2) + math.pow((ym - yn), 2)))
                 if dist <= self.threshold:   # dist is the threshold here
                     self.graph.add_edge(n, m, weight=dist)
 
-    def draw_figure(self):
+    def get_bg_figure(self):
         myfig = plt.figure(figsize=(20, 20))
 
         # TODO: set the file directory as function parameter
@@ -95,7 +98,7 @@ class DrawFilament():
         fig.axis_labels.set_font(family='sans-serif',size='large')
         fig.axis_labels.set_xtext("Galactic Longitude [deg]")
         fig.axis_labels.set_ytext("Galactic Latitude [deg]")
-        plt.title("Filament" + str(self.fil_n) + "Kruskal MST, threshold 0.1deg")
+        plt.title("Filament%d Kruskal MST, threshold %.2fdeg" % (self.fil_n, self.threshold))
         fig.axis_labels.set_font(size=20)
         fig.tick_labels.set_font(size=20)
 
@@ -125,7 +128,8 @@ class DrawFilament():
 
         box = [np.vstack((self.x_box, self.y_box))]
 
-        # TODO: Q~for draw three parallel lines, why it's called rectangles??
+        # Q~for draw three parallel lines, why it's called rectangles??
+        # it's for setting different cmap
         fig.show_rectangles(arml, armb, 0.1, 0.003, color="magenta", cmap=cmap,  #0.03, 0.002 for fila1
                             norm=norm, edgecolors="none", linewidth=2)
         fig.show_rectangles(arml, upperb, 0.3, 0.001, color="red", cmap=cmap,
@@ -140,84 +144,57 @@ class DrawFilament():
 
     def get_tree_list(self):
         # using Kruskal's algorithm
+        # If the graph is not connected a spanning forest is constructed.
+        # A spanning forest is a union of the spanning trees for each connected component of the graph.
         T = nx.minimum_spanning_tree(self.graph)
 
         # using Prim's algorithm
         # T = nx.prim_mst(self.graph)
 
-        # print edges of the MST and overlay them on top of GLIMPSE file
-        pos_mst = nx.get_node_attributes(T,'posxy')
-
-        start = time.time()
-        fig = self.draw_figure()
-        end = time.time()
-        print('draw_figure time is', end-start)  # 11.197342157363892
-
-        for each in sorted(T.edges(data=True)):
-            x1, y1 = pos_mst[each[0]]
-            x2, y2 = pos_mst[each[1]]
-            mst_long = [x1, x2]
-            mst_lat = [y1, y2]
-            edge = [np.vstack((mst_long, mst_lat))]
-            fig.show_lines(edge, color='aquamarine', linewidth=2.5)
-        fig_name = './fil%d_output/Filament%d_%.2f_MST.png' % (self.fil_n, self.fil_n, self.threshold)
-        plt.savefig(fig_name)
-
-        # Tree Diagnosis
-        # number of trees in the graph
-        ntrees = nx.number_connected_components(T)
-        print "number of trees = " + str(ntrees)
-
-        #generate lists of individual trees
+        # generate lists of individual trees
         tree_list = nx.connected_component_subgraphs(T)
 
         # #largest tree in the region
         # max_tree = max(tree_list, key = len)
-        # print "largest tree in the region: " + str(max_tree)
         return tree_list
+
+    def get_distance(self, delta1, delta2):
+        return sqrt(delta1**2 + delta2**2)
 
     def save_tree(self):
         i = 1
         workbook = Workbook()
         ws = workbook.add_sheet('Filament'+str(self.fil_n))
 
+        # add title for sheet
+        title = ['size', 'center_point_xpos', 'center_point_ypos', 'length_ratio', 'likelihood']
+        for col, value in enumerate(title):
+            ws.write(0, col, value)
+
         start = time.time()
         tree_list = self.get_tree_list()
         end = time.time()
-        print('get_tree_list+draw figure time is ', end-start)  # 24.365610122680664
+        print('get_tree_list', end-start)  # 0.014
 
-        for each in tree_list:
-            # number of nodes
-            nnodes = each.number_of_nodes()
+        # draw MST on top of bg figure
+        start = time.time()
+        fig = self.get_bg_figure()
+        end = time.time()
+        print('get_bg_figure', end-start)
 
-            # size
-            tree_size = each.size()
+        # analysis each tree
+        for each_tree in tree_list:
+            # skip one node
+            if each_tree.size() == 0:  # number of edges
+                continue
 
-            # tree total length
-            tree_length = each.size(weight='weight')
-
-            # tree diameter
-            # calculated in number of vertices which must be visited
-            # in order to travel from one node to another
-            diam = nx.diameter(each)
-
-            # average degree
-            avg_deg = float(nnodes) / tree_size
-
-            # clustering coefficient
-            cc = nx.clustering(each)
-            avg_cc = sum(cc.values()) / len(cc)
-
-            # tree density
-            # for undirected graphs, tree density = 2m/ (n*(n-1)), m = # of edges, n = # of nodes
-            rho = nx.density(each)
-
-            # node centralities
-            # measuring length/ width ratio of tree
-            pos_tree = nx.get_node_attributes(each, 'posxy')
+            # if it's parallel
+            # node centralities: measuring length/ width ratio of tree
+            pos_tree = nx.get_node_attributes(each_tree, 'posxy')
             x_val = []
             y_val = []
-            for n,d in each.nodes_iter(data=True):
+            # TODO: check networkx to find a better get access to all nodes
+            for n, d in each_tree.nodes_iter(data=True):
                 xn, yn = pos_tree[n]
                 x_val.append(xn)
                 y_val.append(yn)
@@ -225,30 +202,84 @@ class DrawFilament():
             x_min = min(x_val)
             y_max = max(y_val)
             y_min = min(y_val)
-            if (x_min <= 26.94 <= x_max) and (y_min <= -0.3 <= y_max):
-                bone_likelihood = 1
-            else:
-                bone_likelihood = 0
+
             delta_x = x_max - x_min
             delta_y = y_max - y_min
-            if delta_y < 1e-6:  # if delta_y ==0
+
+            # draw mst trees here
+            for each in sorted(each_tree.edges(data=True)):
+                x1, y1 = pos_tree[each[0]]
+                x2, y2 = pos_tree[each[1]]
+                mst_long = [x1, x2]
+                mst_lat = [y1, y2]
+                edge = [np.vstack((mst_long, mst_lat))]
+                fig.show_lines(edge, color='aquamarine', alpha=0.6, linewidth=4)
+
+            # draw box, avoid wide/high box
+            if x_max-x_min < 0.04:
+                fil_x_box = [x_min-0.02, x_max+0.02, x_max+0.02, x_min-0.02, x_min-0.02]
+                fil_y_box = [y_max, y_max, y_min, y_min, y_max]
+            elif y_max-y_min < 0.04:
+                fil_x_box = [x_min, x_max, x_max, x_min, x_min]
+                fil_y_box = [y_max+0.02, y_max+0.02, y_min-0.02, y_min-0.02, y_max+0.02]
+            else:
+                fil_x_box = [x_min, x_max, x_max, x_min, x_min]
+                fil_y_box = [y_max, y_max, y_min, y_min, y_max]
+
+            box = [np.vstack((fil_x_box, fil_y_box))]
+
+            # break complex structures
+            # TODO: modify the threshold later and do a low_threshold MST algorithm for it
+            if each_tree.size() > 20:
                 continue
-            length_ratio = delta_x / delta_y
 
-            # average inclination angle
-            angle = []
-            for line in sorted(each.edges(data=True)):
-                x1, y1 = pos_tree[line[0]]
-                x2, y2 = pos_tree[line[1]]
-                line_long = x2 - x1
-                line_lat = y2 - y1
-                angle.append(math.degrees(math.atan(line_lat/line_long)))
-            avg_angle = np.mean(angle)
+            # skip tiny pieces
+            # TODO:  modify the threshold later and do a high_threshold MST algorithm for it
+            if self.get_distance(delta_x, delta_y) < 0.05:
+                continue
 
-            tree = [nnodes, tree_size, tree_length, diam, avg_deg, avg_cc,
-                    rho, delta_x, delta_y, length_ratio, avg_angle, bone_likelihood]
+            # length_ratio = atan2(delta_y, delta_x)  # return between -pi and pi
+            length_ratio = atan(delta_y/delta_x)
+
+            # if length_ratioo ~ 0 -> parallel   -> PI/9 as a threshold
+            if fabs(length_ratio) < pi/9 or fabs(length_ratio) > (8./9.)*pi:
+                # parallel and skinny, show as yellow
+                likelihood = 1.
+                fig.show_lines(box, color="yellow", linewidth=2, alpha=0.8, zorder=10)
+
+            #  elif (11./18.)*pi > fabs(length_ratio) > (9./18.)*pi:  # vertical and skinny
+            elif fabs(length_ratio) > (7./18.)*pi:  # vertical and skinny
+                fig.show_lines(box, color="blue", linewidth=2, alpha=0.8, zorder=10)
+                likelihood = 0.5
+
+            else:
+                angle = []
+                for line in sorted(each_tree.edges(data=True)):  # sorted start from 1st dim
+                    x1, y1 = pos_tree[line[0]]
+                    x2, y2 = pos_tree[line[1]]
+                    line_long = x2 - x1
+                    line_lat = y2 - y1
+                    angle.append(atan(line_lat/line_long))
+
+                mean_angle = np.mean(angle)
+                angle = np.array(angle)
+                # skinny inclination range pi/9. around mean_angle
+                num_fil = np.where((angle > (mean_angle-pi/9.)) & (angle < (mean_angle+pi/9.)))[0].size
+
+                if float(num_fil)/float(len(angle)) > 0.7:  # not parallel/vertical but skinny
+                    likelihood = 0.5
+                    fig.show_lines(box, color="blue", linewidth=2, alpha=0.8, zorder=10)
+                else:
+                    likelihood = 0.  # not parallel or skinny
+
+            # (size, center_point_xpos, center_point_ypos, length_ratio, likelihood)
+            tree = [each_tree.size(), delta_x/2., delta_y/2., length_ratio, likelihood]
             for col, col_value in enumerate(tree):
                 ws.write(i, col, col_value)
             i += 1
+
+        fig_name = './fil%d_output/Filament%d_%.2f_MST.png' % (self.fil_n, self.fil_n, self.threshold)
+        plt.savefig(fig_name)
+
         wb_name = './fil%d_output/tree1_%.2f.xls' % (self.fil_n, self.threshold)
         workbook.save(wb_name)
