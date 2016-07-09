@@ -17,7 +17,6 @@ from xlwt import *
 import time
 import os
 from math import *
-from common import get_bg_figure
 
 # TODO: divide draw figures from MST generation/analysis
 
@@ -31,7 +30,7 @@ class DrawFilament():
     SCUTUM_FINAL_4TH_QUAD = '/Users/penny/Works/MST_filaments/Extinction_filaments_data' \
                    '/Scutum_final_4th_quad.txt'
 
-    def __init__(self, fila_n, min_l, max_l, x_box, y_box, line_b, threshold, bg_fig):
+    def __init__(self, fila_n, min_l, max_l, x_box, y_box, line_b, threshold):
         self.lat = []
         self.lng = []
         self.min_l = min_l
@@ -94,11 +93,11 @@ class DrawFilament():
                 if dist <= self.threshold:   # dist is the threshold here
                     # tau_av is larger then the opacity is larger, so the weight is lower
                     # IRDC yes then weight is lower -> +0 no ->+1
-                    is_irdc = 2.
+                    is_irdc = 1.
                     if covered_data['IRDC'][n] is 'y':
-                        is_irdc -= 1.
+                        is_irdc -= .5
                     if covered_data['IRDC'][m] is 'y':
-                        is_irdc -= 1.
+                        is_irdc -= .5
                     # TODO: choose a more meaningful way of defining weight here
                     weight = dist*20. - (covered_data['tau_p'][n] + covered_data['tau_p'][m])/2. + is_irdc
                     if weight < 0:
@@ -195,7 +194,7 @@ class DrawFilament():
         ws = workbook.add_sheet('Filament'+str(self.fil_n))
 
         # add title for sheet
-        title = ['size', 'center_point_xpos', 'center_point_ypos', 'length_ratio', 'likelihood']
+        title = ['size', 'center_point_xpos', 'center_point_ypos', 'tree_weight', 'edge_ave_weight']
         for col, value in enumerate(title):
             ws.write(0, col, value)
 
@@ -233,11 +232,12 @@ class DrawFilament():
 
             delta_x = x_max - x_min
             delta_y = y_max - y_min
-
+            each_tree_weight = 0
             # draw mst trees here
             for each in sorted(each_tree.edges(data='weight')):
                 # print('what is each edge', each, each[2])
                 # ('what is each edge', (323, 337, 2.2539938916387352), 2.2539938916387352)
+                each_tree_weight += each[2]
 
                 x1, y1 = pos_tree[each[0]]
                 x2, y2 = pos_tree[each[1]]
@@ -256,7 +256,7 @@ class DrawFilament():
                     # these are what we want
                     fig.show_lines(edge, color='yellow', alpha=0.6, linewidth=4)
 
-            # draw box, avoid wide/high box
+            '''# draw box, avoid wide/high box
             if x_max-x_min < 0.04:
                 fil_x_box = [x_min-0.02, x_max+0.02, x_max+0.02, x_min-0.02, x_min-0.02]
                 fil_y_box = [y_max, y_max, y_min, y_min, y_max]
@@ -313,10 +313,13 @@ class DrawFilament():
                     likelihood = 0.5
                     fig.show_lines(box, color="blue", linewidth=2, alpha=0.8, zorder=10)
                 else:
-                    likelihood = 0.  # not parallel or skinny
+                    likelihood = 0.  # not parallel or skinny'''
 
             # (size, center_point_xpos, center_point_ypos, length_ratio, likelihood)
-            tree = [each_tree.size(), delta_x/2., delta_y/2., length_ratio, likelihood]
+            # tree = [each_tree.size(), delta_x/2., delta_y/2., length_ratio, likelihood]
+            ave_weight = float(each_tree_weight)/float(each_tree.size())
+            tree = [each_tree.size(), delta_x/2., delta_y/2., each_tree_weight, ave_weight]
+
             for col, col_value in enumerate(tree):
                 ws.write(i, col, col_value)
             i += 1
