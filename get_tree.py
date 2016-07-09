@@ -18,7 +18,13 @@ import time
 import os
 from math import *
 
-# TODO: divide draw figures from MST generation/analysis
+'''
+Try to split the bg and fg drawing using aplpy
+1. the fig and plt could be reused after save_fig
+2. The layers of aplpy could be overlaped by setting the layer='layer_name',
+but there is no method like 'remove all line layer', and no customized layer overlay
+3. reuse matplotlib plot http://stackoverflow.com/questions/10499482/how-do-i-reuse-plots-in-matplotlib
+'''
 
 
 class GraphMST():
