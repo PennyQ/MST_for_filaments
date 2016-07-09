@@ -93,17 +93,22 @@ class DrawFilament():
                 if dist <= self.threshold:   # dist is the threshold here
                     # tau_av is larger then the opacity is larger, so the weight is lower
                     # IRDC yes then weight is lower -> +0 no ->+1
-                    is_irdc = 1.
-                    if covered_data['IRDC'][n] is 'y':
-                        is_irdc -= .5
-                    if covered_data['IRDC'][m] is 'y':
-                        is_irdc -= .5
+                    # is_irdc = 1.
+                    # if covered_data['IRDC'][n] is 'y':
+                    #     is_irdc -= .5
+                    # if covered_data['IRDC'][m] is 'y':
+                    #     is_irdc -= .5
+                    if covered_data['IRDC'][m] is 'y' or covered_data['IRDC'][n] is 'y' or \
+                                    covered_data['tau_p'][m] > 1.5 or covered_data['tau_p'][n] > 1.5:
+                        has_key_node = True
+                    else:
+                        has_key_node = False
                     # TODO: choose a more meaningful way of defining weight here
-                    weight = dist*20. - (covered_data['tau_p'][n] + covered_data['tau_p'][m])/2. + is_irdc
-                    if weight < 0:
-                        weight = 0.
-                    print('new weight and old', weight, dist, is_irdc)
-                    self.graph.add_edge(n, m, weight=weight)
+                    # weight = dist*20. - (covered_data['tau_p'][n] + covered_data['tau_p'][m])/2. + is_irdc
+                    # if weight < 0:
+                    #     weight = 0.
+                    # print('new weight and old', weight, dist, is_irdc)
+                    self.graph.add_edge(n, m, weight=dist, has_key_node=has_key_node)
 
     def get_bg_figure(self):
         myfig = plt.figure(figsize=(20, 20))
@@ -234,10 +239,10 @@ class DrawFilament():
             delta_y = y_max - y_min
             each_tree_weight = 0
             # draw mst trees here
-            for each in sorted(each_tree.edges(data='weight')):
+            for each in sorted(each_tree.edges(data='has_key_node')):
                 # print('what is each edge', each, each[2])
                 # ('what is each edge', (323, 337, 2.2539938916387352), 2.2539938916387352)
-                each_tree_weight += each[2]
+                each_tree_weight += int(each[2])
 
                 x1, y1 = pos_tree[each[0]]
                 x2, y2 = pos_tree[each[1]]
@@ -246,7 +251,12 @@ class DrawFilament():
                 edge = [np.vstack((mst_long, mst_lat))]
 
                 # TODO: can I use a new fig as the bg_fig, and draw upon it?
-                if each[2] > 2:
+                if each[2]:
+                    fig.show_lines(edge, color='deeppink', alpha=0.6, linewidth=4)
+                else:
+                    fig.show_lines(edge, color='aquamarine', alpha=0.6, linewidth=4)
+
+                '''if each[2] > 2:
                     # TODO: show a box around this edge and its neighbour edge
                     fig.show_lines(edge, color='blue', alpha=0.6, linewidth=4)
                     print('did I draw here?')
@@ -254,7 +264,7 @@ class DrawFilament():
                     fig.show_lines(edge, color='aquamarine', alpha=0.6, linewidth=4)
                 else:
                     # these are what we want
-                    fig.show_lines(edge, color='yellow', alpha=0.6, linewidth=4)
+                    fig.show_lines(edge, color='yellow', alpha=0.6, linewidth=4)'''
 
             '''# draw box, avoid wide/high box
             if x_max-x_min < 0.04:
