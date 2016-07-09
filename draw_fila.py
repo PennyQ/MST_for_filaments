@@ -12,6 +12,7 @@ from ds9norm import DS9Normalize
 import math
 # import decimal
 from astropy.table import Table
+from astropy.io import fits
 from xlwt import *
 import time
 import os
@@ -22,7 +23,8 @@ from math import *
 
 class DrawFilament():
     # path to file
-    CLOUD_LB = '/Users/penny/Works/MST_filaments/Peretto_Fuller_data/cloudfitsLB.txt'
+
+    PF_IRDC = '/Users/penny/Works/MST_filaments/Peretto_Fuller_data/peretto_fuller_irdc.fit'
     SCUTUM_FINAL = '/Users/penny/Works/MST_filaments/Extinction_filaments_data' \
                    '/Scutum_final.txt'
     SCUTUM_FINAL_4TH_QUAD = '/Users/penny/Works/MST_filaments/Extinction_filaments_data' \
@@ -55,17 +57,30 @@ class DrawFilament():
         if not os.path.exists('./fil%d_output' % self.fil_n):
             os.makedirs('./fil%d_output' % self.fil_n)
 
+
     def create_graph(self):
         # create arrays for storing coordinates of molecular clouds
-        cloudfitsLB = open(self.CLOUD_LB)
-        for n, line in enumerate(cloudfitsLB):
-            columns = line.split(", ")
+        hdulist = fits.open(self.PF_IRDC)
+        tbdata = hdulist[1].data
 
-            if ((float(columns[0]) >= self.min_l) and (float(columns[0]) <= self.max_l) and
-                        (float(columns[1])) <= 1 and (float(columns[1]) >= (-1))):
-                self.lat.append(float(columns[0]))
-                self.lng.append(float(columns[1]))
-                self.graph.add_node(str(n), posxy=(self.lat[-1], self.lng[-1]))
+        mask = np.where((self.max_l >= tbdata['_Glon']) & (tbdata['_Glon'] >= self.min_l)
+                        & (1 >= tbdata['_Glat']) & (tbdata['_Glat'] >= -1))
+        covered_data = tbdata[mask]
+        self.lat = covered_data['_Glat']
+        self.lng = covered_data['_Glon']
+        for i in range(len(covered_data)):
+            self.graph.add_node(i, posxy=(self.lng[i], self.lat[i]))
+
+        '''g_lon = tbdata['_Glon']
+        g_lat = tbdata['_Glat']
+        tau_av = tbdata['tau_av']
+
+        # TODO: we could try to reduce the loop here later :)
+        for i in range(len(g_lon)):
+            if self.max_l >= g_lon[i] >= self.min_l and 1 >= g_lat[i] >= -1:
+                self.lat.append(g_lat[i])
+                self.lng.append(g_lon[i])
+                self.graph.add_node(i, posxy=(self.lng[-1], self.lat[-1]))'''
 
         positions = nx.get_node_attributes(self.graph, 'posxy')
 
@@ -76,7 +91,24 @@ class DrawFilament():
                 xm, ym = positions[m]
                 dist = (math.sqrt(math.pow((xm - xn), 2) + math.pow((ym - yn), 2)))
                 if dist <= self.threshold:   # dist is the threshold here
-                    self.graph.add_edge(n, m, weight=dist)
+                    # tau_av is larger then the opacity is larger, so the weight is lower
+                    # IRDC yes then weight is lower -> +0 no ->+1
+                    # is_irdc = 1.
+                    # if covered_data['IRDC'][n] is 'y':
+                    #     is_irdc -= .5
+                    # if covered_data['IRDC'][m] is 'y':
+                    #     is_irdc -= .5
+                    if covered_data['IRDC'][m] is 'y' or covered_data['IRDC'][n] is 'y' or \
+                                    covered_data['tau_p'][m] > 1.5 or covered_data['tau_p'][n] > 1.5:
+                        has_key_node = True
+                    else:
+                        has_key_node = False
+                    # TODO: choose a more meaningful way of defining weight here
+                    # weight = dist*20. - (covered_data['tau_p'][n] + covered_data['tau_p'][m])/2. + is_irdc
+                    # if weight < 0:
+                    #     weight = 0.
+                    # print('new weight and old', weight, dist, is_irdc)
+                    self.graph.add_edge(n, m, weight=dist, has_key_node=has_key_node)
 
     def get_bg_figure(self):
         myfig = plt.figure(figsize=(20, 20))
@@ -136,7 +168,7 @@ class DrawFilament():
                             norm=norm, edgecolors="none", linewidth=2)
         fig.show_rectangles(arml, lowerb, 0.3, 0.001, color="red", cmap=cmap,
                             norm=norm, edgecolors="none", linewidth=2)
-        fig.show_markers(self.lat, self.lng, s=30, alpha=1, zorder=2,
+        fig.show_markers(self.lng, self.lat, s=30, alpha=1, zorder=2,
                          marker='^', c='yellow')
         fig.show_lines(box, color="crimson", linewidth=3, zorder=10)
 
@@ -167,7 +199,7 @@ class DrawFilament():
         ws = workbook.add_sheet('Filament'+str(self.fil_n))
 
         # add title for sheet
-        title = ['size', 'center_point_xpos', 'center_point_ypos', 'length_ratio', 'likelihood']
+        title = ['size', 'center_point_xpos', 'center_point_ypos', 'tree_weight', 'edge_ave_weight']
         for col, value in enumerate(title):
             ws.write(0, col, value)
 
@@ -205,17 +237,36 @@ class DrawFilament():
 
             delta_x = x_max - x_min
             delta_y = y_max - y_min
-
+            each_tree_weight = 0
             # draw mst trees here
-            for each in sorted(each_tree.edges(data=True)):
+            for each in sorted(each_tree.edges(data='has_key_node')):
+                # print('what is each edge', each, each[2])
+                # ('what is each edge', (323, 337, 2.2539938916387352), 2.2539938916387352)
+                each_tree_weight += int(each[2])
+
                 x1, y1 = pos_tree[each[0]]
                 x2, y2 = pos_tree[each[1]]
                 mst_long = [x1, x2]
                 mst_lat = [y1, y2]
                 edge = [np.vstack((mst_long, mst_lat))]
-                fig.show_lines(edge, color='aquamarine', alpha=0.6, linewidth=4)
 
-            # draw box, avoid wide/high box
+                # TODO: can I use a new fig as the bg_fig, and draw upon it?
+                if each[2]:
+                    fig.show_lines(edge, color='deeppink', alpha=0.6, linewidth=4)
+                else:
+                    fig.show_lines(edge, color='aquamarine', alpha=0.6, linewidth=4)
+
+                '''if each[2] > 2:
+                    # TODO: show a box around this edge and its neighbour edge
+                    fig.show_lines(edge, color='blue', alpha=0.6, linewidth=4)
+                    print('did I draw here?')
+                elif each[2] > 1:
+                    fig.show_lines(edge, color='aquamarine', alpha=0.6, linewidth=4)
+                else:
+                    # these are what we want
+                    fig.show_lines(edge, color='yellow', alpha=0.6, linewidth=4)'''
+
+            '''# draw box, avoid wide/high box
             if x_max-x_min < 0.04:
                 fil_x_box = [x_min-0.02, x_max+0.02, x_max+0.02, x_min-0.02, x_min-0.02]
                 fil_y_box = [y_max, y_max, y_min, y_min, y_max]
@@ -227,6 +278,8 @@ class DrawFilament():
                 fil_y_box = [y_max, y_max, y_min, y_min, y_max]
 
             box = [np.vstack((fil_x_box, fil_y_box))]
+
+            # check the filament or not ====================
 
             # break complex structures
             # TODO: modify the threshold later and do a low_threshold MST algorithm for it
@@ -270,10 +323,13 @@ class DrawFilament():
                     likelihood = 0.5
                     fig.show_lines(box, color="blue", linewidth=2, alpha=0.8, zorder=10)
                 else:
-                    likelihood = 0.  # not parallel or skinny
+                    likelihood = 0.  # not parallel or skinny'''
 
             # (size, center_point_xpos, center_point_ypos, length_ratio, likelihood)
-            tree = [each_tree.size(), delta_x/2., delta_y/2., length_ratio, likelihood]
+            # tree = [each_tree.size(), delta_x/2., delta_y/2., length_ratio, likelihood]
+            ave_weight = float(each_tree_weight)/float(each_tree.size())
+            tree = [each_tree.size(), delta_x/2., delta_y/2., each_tree_weight, ave_weight]
+
             for col, col_value in enumerate(tree):
                 ws.write(i, col, col_value)
             i += 1
