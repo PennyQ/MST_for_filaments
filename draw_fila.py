@@ -236,12 +236,6 @@ class DrawFilament():
         fig_name = './fil%d_output/Filament%d_%.2f_MST.png' % (self.fil_n, self.fil_n, self.threshold)
         plt.savefig(fig_name)
 
-        plt.clf()  # try if I clear everything here and reuse the figure :( doesn't work, seems the whole figure is empty now
-        print('current plt', plt)
-        fig.show_markers(self.lng, self.lat, s=30, alpha=1, zorder=2,
-                         marker='^', c='yellow')
-
-        plt.savefig('try_reuse.png')
         end = time.time()
         print('save fig time', end - start)  # TODO: here is 10 sec, almost half of time
 
