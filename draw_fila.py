@@ -45,10 +45,7 @@ class DrawFilament():
         self.line_b = line_b
 
         # init the graph
-        start = time.time()
         self.create_graph()
-        end = time.time()
-        print('create_graph time is', end-start) # this is ok
 
         self.fil_n = fila_n
 
@@ -56,7 +53,6 @@ class DrawFilament():
                                   'Extinction_filaments_data/Candid%d_cropped_final.fits' % self.fil_n
         if not os.path.exists('./fil%d_output' % self.fil_n):
             os.makedirs('./fil%d_output' % self.fil_n)
-
 
     def create_graph(self):
         # create arrays for storing coordinates of molecular clouds
@@ -71,17 +67,6 @@ class DrawFilament():
         for i in range(len(covered_data)):
             self.graph.add_node(i, posxy=(self.lng[i], self.lat[i]))
 
-        '''g_lon = tbdata['_Glon']
-        g_lat = tbdata['_Glat']
-        tau_av = tbdata['tau_av']
-
-        # TODO: we could try to reduce the loop here later :)
-        for i in range(len(g_lon)):
-            if self.max_l >= g_lon[i] >= self.min_l and 1 >= g_lat[i] >= -1:
-                self.lat.append(g_lat[i])
-                self.lng.append(g_lon[i])
-                self.graph.add_node(i, posxy=(self.lng[-1], self.lat[-1]))'''
-
         positions = nx.get_node_attributes(self.graph, 'posxy')
 
         # build edges of graph, within a certain distance treshold
@@ -90,24 +75,17 @@ class DrawFilament():
             for m, g in self.graph.nodes_iter(data=True):
                 xm, ym = positions[m]
                 dist = (math.sqrt(math.pow((xm - xn), 2) + math.pow((ym - yn), 2)))
-                if dist <= self.threshold:   # dist is the threshold here
+                if dist <= self.threshold:
+
                     # tau_av is larger then the opacity is larger, so the weight is lower
                     # IRDC yes then weight is lower -> +0 no ->+1
-                    # is_irdc = 1.
-                    # if covered_data['IRDC'][n] is 'y':
-                    #     is_irdc -= .5
-                    # if covered_data['IRDC'][m] is 'y':
-                    #     is_irdc -= .5
                     if covered_data['IRDC'][m] is 'y' or covered_data['IRDC'][n] is 'y' or \
                                     covered_data['tau_p'][m] > 1.5 or covered_data['tau_p'][n] > 1.5:
                         has_key_node = True
                     else:
                         has_key_node = False
-                    # TODO: choose a more meaningful way of defining weight here
-                    # weight = dist*20. - (covered_data['tau_p'][n] + covered_data['tau_p'][m])/2. + is_irdc
-                    # if weight < 0:
-                    #     weight = 0.
-                    # print('new weight and old', weight, dist, is_irdc)
+
+                    # set attribute for each edge
                     self.graph.add_edge(n, m, weight=dist, has_key_node=has_key_node)
 
     def get_bg_figure(self):
@@ -203,16 +181,10 @@ class DrawFilament():
         for col, value in enumerate(title):
             ws.write(0, col, value)
 
-        start = time.time()
         tree_list = self.get_tree_list()
-        end = time.time()
-        print('get_tree_list', end-start)  # 0.014
 
         # draw MST on top of bg figure
-        start = time.time()
         fig = self.get_bg_figure()
-        end = time.time()
-        print('get_bg_figure', end-start)
 
         # analysis each tree
         for each_tree in tree_list:
@@ -220,32 +192,27 @@ class DrawFilament():
             if each_tree.size() == 0:  # number of edges
                 continue
 
-            # if it's parallel
             # node centralities: measuring length/ width ratio of tree
-            pos_tree = nx.get_node_attributes(each_tree, 'posxy')
-            x_val = []
-            y_val = []
-            # TODO: check networkx to find a better get access to all nodes
-            for n, d in each_tree.nodes_iter(data=True):
-                xn, yn = pos_tree[n]
-                x_val.append(xn)
-                y_val.append(yn)
-            x_max = max(x_val)
-            x_min = min(x_val)
-            y_max = max(y_val)
-            y_min = min(y_val)
+            node_pos = nx.get_node_attributes(each_tree, 'posxy')
+            # tree_node = np.array(pos_tree.keys())
+            tree_posxy = np.array(node_pos.values())
+            x_pos = tree_posxy[:, 0]
+            y_pos = tree_posxy[:, 1]
 
-            delta_x = x_max - x_min
-            delta_y = y_max - y_min
+            # for storing center point
+            delta_x = max(x_pos) - min(x_pos)
+            delta_y = max(y_pos) - min(y_pos)
             each_tree_weight = 0
+
             # draw mst trees here
+            start = time.time()
             for each in sorted(each_tree.edges(data='has_key_node')):
                 # print('what is each edge', each, each[2])
                 # ('what is each edge', (323, 337, 2.2539938916387352), 2.2539938916387352)
                 each_tree_weight += int(each[2])
 
-                x1, y1 = pos_tree[each[0]]
-                x2, y2 = pos_tree[each[1]]
+                x1, y1 = node_pos[each[0]]
+                x2, y2 = node_pos[each[1]]
                 mst_long = [x1, x2]
                 mst_lat = [y1, y2]
                 edge = [np.vstack((mst_long, mst_lat))]
@@ -256,86 +223,21 @@ class DrawFilament():
                 else:
                     fig.show_lines(edge, color='aquamarine', alpha=0.6, linewidth=4)
 
-                '''if each[2] > 2:
-                    # TODO: show a box around this edge and its neighbour edge
-                    fig.show_lines(edge, color='blue', alpha=0.6, linewidth=4)
-                    print('did I draw here?')
-                elif each[2] > 1:
-                    fig.show_lines(edge, color='aquamarine', alpha=0.6, linewidth=4)
-                else:
-                    # these are what we want
-                    fig.show_lines(edge, color='yellow', alpha=0.6, linewidth=4)'''
-
-            '''# draw box, avoid wide/high box
-            if x_max-x_min < 0.04:
-                fil_x_box = [x_min-0.02, x_max+0.02, x_max+0.02, x_min-0.02, x_min-0.02]
-                fil_y_box = [y_max, y_max, y_min, y_min, y_max]
-            elif y_max-y_min < 0.04:
-                fil_x_box = [x_min, x_max, x_max, x_min, x_min]
-                fil_y_box = [y_max+0.02, y_max+0.02, y_min-0.02, y_min-0.02, y_max+0.02]
-            else:
-                fil_x_box = [x_min, x_max, x_max, x_min, x_min]
-                fil_y_box = [y_max, y_max, y_min, y_min, y_max]
-
-            box = [np.vstack((fil_x_box, fil_y_box))]
-
-            # check the filament or not ====================
-
-            # break complex structures
-            # TODO: modify the threshold later and do a low_threshold MST algorithm for it
-            if each_tree.size() > 20:
-                continue
-
-            # skip tiny pieces
-            # TODO:  modify the threshold later and do a high_threshold MST algorithm for it
-            if self.get_distance(delta_x, delta_y) < 0.05:
-                continue
-
-            # length_ratio = atan2(delta_y, delta_x)  # return between -pi and pi
-            length_ratio = atan(delta_y/delta_x)
-
-            # if length_ratioo ~ 0 -> parallel   -> PI/9 as a threshold
-            if fabs(length_ratio) < pi/9 or fabs(length_ratio) > (8./9.)*pi:
-                # parallel and skinny, show as yellow
-                likelihood = 1.
-                fig.show_lines(box, color="yellow", linewidth=2, alpha=0.8, zorder=10)
-
-            #  elif (11./18.)*pi > fabs(length_ratio) > (9./18.)*pi:  # vertical and skinny
-            elif fabs(length_ratio) > (7./18.)*pi:  # vertical and skinny
-                fig.show_lines(box, color="blue", linewidth=2, alpha=0.8, zorder=10)
-                likelihood = 0.5
-
-            else:
-                angle = []
-                for line in sorted(each_tree.edges(data=True)):  # sorted start from 1st dim
-                    x1, y1 = pos_tree[line[0]]
-                    x2, y2 = pos_tree[line[1]]
-                    line_long = x2 - x1
-                    line_lat = y2 - y1
-                    angle.append(atan(line_lat/line_long))
-
-                mean_angle = np.mean(angle)
-                angle = np.array(angle)
-                # skinny inclination range pi/9. around mean_angle
-                num_fil = np.where((angle > (mean_angle-pi/9.)) & (angle < (mean_angle+pi/9.)))[0].size
-
-                if float(num_fil)/float(len(angle)) > 0.7:  # not parallel/vertical but skinny
-                    likelihood = 0.5
-                    fig.show_lines(box, color="blue", linewidth=2, alpha=0.8, zorder=10)
-                else:
-                    likelihood = 0.  # not parallel or skinny'''
-
-            # (size, center_point_xpos, center_point_ypos, length_ratio, likelihood)
-            # tree = [each_tree.size(), delta_x/2., delta_y/2., length_ratio, likelihood]
             ave_weight = float(each_tree_weight)/float(each_tree.size())
             tree = [each_tree.size(), delta_x/2., delta_y/2., each_tree_weight, ave_weight]
 
             for col, col_value in enumerate(tree):
                 ws.write(i, col, col_value)
             i += 1
+            end = time.time()
+            print('draw mst tree time', end -start)
 
+        start = time.time()
         fig_name = './fil%d_output/Filament%d_%.2f_MST.png' % (self.fil_n, self.fil_n, self.threshold)
         plt.savefig(fig_name)
+
+        end = time.time()
+        print('save fig time', end - start)  # TODO: here is 10 sec, almost half of time
 
         wb_name = './fil%d_output/tree1_%.2f.xls' % (self.fil_n, self.threshold)
         workbook.save(wb_name)
