@@ -57,7 +57,7 @@ class DrawFilament():
         if not os.path.exists('./fil%d_output' % self.fil_n):
             os.makedirs('./fil%d_output' % self.fil_n)
 
-
+    # TODO: now create graph time is so long!!!!!!!!!
     def create_graph(self):
         # create arrays for storing coordinates of molecular clouds
         hdulist = fits.open(self.PF_IRDC)
@@ -89,7 +89,12 @@ class DrawFilament():
             xn, yn = positions[n]
             for m, g in self.graph.nodes_iter(data=True):
                 xm, ym = positions[m]
-                dist = (math.sqrt(math.pow((xm - xn), 2) + math.pow((ym - yn), 2)))
+                # dist = (math.sqrt(math.pow((xm - xn), 2) + math.pow((ym - yn), 2)))
+                # add normalized 'tau_p' of edge nodes to calculation of weight
+                min_tau = min(covered_data['tau_p'])
+                tau_factor = 2*sqrt(min_tau/(covered_data['tau_p'][n] + covered_data['tau_p'][m]))
+                print('tau_factor', tau_factor)
+                dist = (math.sqrt(math.pow((xm - xn), 2) + math.pow((ym - yn), 2))) * tau_factor
                 if dist <= self.threshold:   # dist is the threshold here
                     # tau_av is larger then the opacity is larger, so the weight is lower
                     # IRDC yes then weight is lower -> +0 no ->+1
@@ -99,10 +104,11 @@ class DrawFilament():
                     if covered_data['IRDC'][m] is 'y':
                         is_irdc -= .5
                     # TODO: choose a more meaningful way of defining weight here
-                    weight = dist*20. - (covered_data['tau_p'][n] + covered_data['tau_p'][m])/2. + is_irdc
+                    weight = dist
+                    # weight = dist*20. - (covered_data['tau_p'][n] + covered_data['tau_p'][m])/2. + is_irdc
                     if weight < 0:
                         weight = 0.
-                    print('new weight and old', weight, dist, is_irdc)
+                    # print('new weight and old', weight, dist, is_irdc)
                     self.graph.add_edge(n, m, weight=weight)
 
     def get_bg_figure(self):
@@ -246,15 +252,15 @@ class DrawFilament():
                 edge = [np.vstack((mst_long, mst_lat))]
 
                 # TODO: can I use a new fig as the bg_fig, and draw upon it?
-                if each[2] > 2:
+                # if each[2] > 2:
                     # TODO: show a box around this edge and its neighbour edge
-                    fig.show_lines(edge, color='blue', alpha=0.6, linewidth=4)
-                    print('did I draw here?')
-                elif each[2] > 1:
-                    fig.show_lines(edge, color='aquamarine', alpha=0.6, linewidth=4)
-                else:
+                    # fig.show_lines(edge, color='blue', alpha=0.6, linewidth=4)
+                # elif each[2] > 1:
+                #     fig.show_lines(edge, color='aquamarine', alpha=0.6, linewidth=4)
+                # else:
                     # these are what we want
-                    fig.show_lines(edge, color='yellow', alpha=0.6, linewidth=4)
+                    # fig.show_lines(edge, color='yellow', alpha=0.6, linewidth=4)
+                fig.show_lines(edge, color='yellow', alpha=0.6, linewidth=4)
 
             '''# draw box, avoid wide/high box
             if x_max-x_min < 0.04:
@@ -326,6 +332,7 @@ class DrawFilament():
 
         fig_name = './fil%d_output/Filament%d_%.2f_MST.png' % (self.fil_n, self.fil_n, self.threshold)
         plt.savefig(fig_name)
+        plt.close()
 
         wb_name = './fil%d_output/tree1_%.2f.xls' % (self.fil_n, self.threshold)
         workbook.save(wb_name)
