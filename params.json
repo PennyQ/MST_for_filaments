@@ -1,6 +1,0 @@
-{
-  "name": "Mst for filaments",
-  "tagline": "",
-  "body": "# MST_for_filaments\r\n\r\n`draw_fila.py` includes all functions to get the graph, draw figures and generate tree list.\r\n\r\n'main.py' includes all filament data and will call 'draw_fila.py'.\r\n",
-  "note": "Don't delete this file! It's used internally to help with page regeneration."
-}
